@@ -1,0 +1,530 @@
+openapi: 3.0.0
+info:
+  title: Custom URL Shortener API
+  description: |
+    The **Custom URL Shortener API** is a scalable, feature-rich solution designed to simplify the sharing of long URLs by generating concise, easy-to-share short URLs. 
+    This API offers advanced functionalities such as detailed analytics for individual and overall URLs, user authentication via Google Sign-In, and rate limiting to ensure smooth operation even under high traffic.
+
+    Key Features:
+    - **URL Shortening**: Allows users to create short, shareable URLs from long, complex URLs.
+    - **Advanced Analytics**: Provides in-depth analytics such as total clicks, unique clicks, clicks by date, device and OS breakdowns, and more.
+    - **User Authentication**: Users can authenticate securely using **Google Sign-In**, ensuring a personalized experience and user management.
+    - **Topic-Based Grouping**: URLs can be grouped under specific topics such as **Acquisition**, **Activation**, and **Retention**, making it easier to organize and track link performance.
+    - **Rate Limiting**: Protects the API from misuse and ensures fair usage across all users.
+    - **Scalability**: Built with scalability in mind, this system is designed to handle large traffic volumes and provide fast responses.
+
+    Architecture:
+    - **RESTful API**: The API follows REST principles for simplicity and ease of use.
+    - **Dockerized**: The application is containerized using Docker, allowing easy deployment to any cloud hosting service (e.g., AWS, Azure, GCP), and providing seamless scalability.
+    - **Database**: Utilizes a NoSQL database for efficient handling of URL data, user information, and analytics.
+
+    Technologies Used:
+    - **Backend**: Node.js with Express.js
+    - **Authentication**: Google OAuth 2.0
+    - **Database**: MongoDB (or another suitable NoSQL database)
+    - **Rate Limiting**: Implemented using middleware such as **express-rate-limit**
+    - **Containerization**: Docker for creating and managing containerized applications
+    - **Cloud Hosting**: Easily deployable on platforms like AWS, Azure, or Google Cloud.
+
+    How To Testing / Validating:
+      1. First, authenticate the user by redirecting to `/auth/google` for Google OAuth authentication.
+      2. Once authenticated, obtain the access token.
+      3. Pass the access token in the `Authorization` header in the format `Bearer access_token` when making requests to the API.
+      4. You can test the API using Postman for all methods except `POST` (for which the access token must be included in the header).
+      5. Alternatively, you can directly enter the URL in your browser for testing the API (GET requests only).
+  version: 1.0.0
+
+servers:
+  - url: 'https://yourdomain.com/'
+  - url: 'http://localhost/'
+
+
+paths:
+  /auth/google:
+    get:
+      summary: Initiate Google OAuth login
+      description: Redirects the user to the Google OAuth authorization page to initiate the login process.
+      responses:
+        '302':
+          description: Redirect to Google OAuth authorization page
+          headers:
+            Location:
+              description: URL to Google OAuth authorization page
+              schema:
+                type: string
+                example: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=YOUR_GOOGLE_CLIENT_ID&redirect_uri=YOUR_REDIRECT_URI&response_type=code&scope=email profile'
+
+  /auth/google/callback:
+    get:
+      summary: Handle Google OAuth callback
+      description: Receives the authorization code, exchanges it for tokens, and fetches the user profile information.
+      parameters:
+        - name: code
+          in: query
+          description: The authorization code from the Google OAuth response
+          required: true
+          schema:
+            type: string
+            example: 'AUTH_CODE'
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 'Login successful'
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        example: 'google_user_id'
+                      email:
+                        type: string
+                        example: 'user@example.com'
+                      name:
+                        type: string
+                        example: 'User Name'
+                      profilePhoto:
+                        type: string
+                        example: 'https://profilephoto.url'
+        '400':
+          description: Missing or invalid authorization code
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Authorization code not found'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Authentication failed'
+
+  /api/shorten:
+    post:
+      summary: Create a short URL
+      description: Generates a shortened URL for the provided long URL. Supports optional custom alias and topic categorization. Implements rate limiting to restrict the number of short URLs a user can create within a specified time frame.
+      
+      requestBody:
+        description: Request body containing the URL details.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                longUrl:
+                  type: string
+                  description: The original URL to be shortened.
+                  example: 'https://example.com/some/long/path'
+                customAlias:
+                  type: string
+                  description: A custom alias for the short URL (optional).
+                  example: 'myCustomAlias'
+                topic:
+                  type: string
+                  description: A category under which the short URL is grouped (optional).
+                  example: 'activation'
+
+                  curl:
+        summary: Example of using curl to create a short URL
+        value: |
+          curl -X POST http://localhost:3000/api/shorten \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer access_token" \
+
+          -d '{
+            "longUrl": "https://example.com/some/long/path",
+            "customAlias": "myCustomAlias",
+            "topic": "activation"
+          }'
+      responses:
+        '201':
+          description: Short URL created successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shortUrl:
+                    type: string
+                    description: The generated short URL.
+                    example: 'http://localhost:3000/myCustomAlias'
+                  createdAt:
+                    type: string
+                    format: date-time
+                    description: The timestamp when the short URL was created.
+                    example: '2024-01-01T12:00:00Z'
+        '400':
+          description: Invalid input or alias already in use.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Error message.
+                    example: 'longUrl is required'
+        '429':
+          description: Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Error message.
+                    example: 'Rate limit exceeded. Please try again later.'
+        '500':
+          description: Server error.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Error message.
+                    example: 'Server error'
+
+                    examples:
+      
+
+
+  /api/shorten/{alias}:
+    get:
+      summary: Redirect to the original URL based on the short URL alias
+      description: |
+        Redirects the user to the original long URL based on the provided alias.
+      parameters:
+        - name: alias
+          in: path
+          required: true
+          description: The alias of the short URL.
+          schema:
+            type: string
+            example: 'myCustomAlias'
+      responses:
+        '302':
+          description: Redirect to the original long URL.
+          headers:
+            Location:
+              description: The original long URL to redirect the user.
+              schema:
+                type: string
+                example: 'https://example.com/some/long/path'
+        '404':
+          description: Alias not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Error message.
+                    example: 'Short URL not found'
+        '429':
+          description: Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Error message.
+                    example: 'Rate limit exceeded. Please try again later.'
+        '500':
+          description: Server error.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Error message.
+                    example: 'Server error'
+
+
+  /api/analytics/{alias}:
+    get:
+      summary: Retrieve detailed analytics for a specific short URL
+      description: |
+        Fetches detailed analytics for the given short URL alias, providing insights into its performance.
+        The data includes total clicks, unique audience interactions, and performance insights based on 
+        operating system type and device type. The analytics also include click counts grouped by the past 7 days.
+      parameters:
+        - name: alias
+          in: path
+          required: true
+          description: The alias of the short URL for which analytics data is being fetched.
+          schema:
+            type: string
+            example: 'myCustomAlias'
+      responses:
+        '200':
+          description: Successful retrieval of analytics data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalClicks:
+                    type: integer
+                    description: Total number of times the short URL has been accessed.
+                    example: 150
+                  uniqueClicks:
+                    type: integer
+                    description: Number of unique users who accessed the short URL.
+                    example: 120
+                  clicksByDate:
+                    type: array
+                    description: An array of objects containing date and click count for the last 7 days.
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                          example: '2024-12-23'
+                        clickCount:
+                          type: integer
+                          example: 25
+                  osType:
+                    type: array
+                    description: An array of objects detailing the unique clicks and users based on OS.
+                    items:
+                      type: object
+                      properties:
+                        osName:
+                          type: string
+                          example: 'Windows'
+                        uniqueClicks:
+                          type: integer
+                          example: 45
+                        uniqueUsers:
+                          type: integer
+                          example: 40
+                  deviceType:
+                    type: array
+                    description: An array of objects detailing the unique clicks and users based on device type.
+                    items:
+                      type: object
+                      properties:
+                        deviceName:
+                          type: string
+                          example: 'mobile'
+                        uniqueClicks:
+                          type: integer
+                          example: 30
+                        uniqueUsers:
+                          type: integer
+                          example: 25
+        '404':
+          description: Analytics not found for the alias.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 'Analytics not found for the alias'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 'Internal server error'
+
+  /api/analytics/topic/{topic}:
+    get:
+      summary: Retrieve analytics for all short URLs grouped under a specific topic
+      description: |
+        Fetches the analytics for all short URLs that belong to the specified topic, allowing users to assess 
+        the overall performance of their links based on categories or topics. This data includes total clicks, 
+        unique audience interactions, and the performance of each short URL under the topic.
+      parameters:
+        - name: topic
+          in: path
+          required: true
+          description: The topic under which the short URLs are grouped for analytics.
+          schema:
+            type: string
+            example: 'technology'
+      responses:
+        '200':
+          description: Successful retrieval of topic-based analytics data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalClicks:
+                    type: integer
+                    description: Total number of clicks across all URLs in the specified topic.
+                    example: 500
+                  uniqueClicks:
+                    type: integer
+                    description: Number of unique users who accessed URLs in the specified topic.
+                    example: 450
+                  clicksByDate:
+                    type: array
+                    description: An array of objects containing date and total click counts for all URLs under topic.
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                          example: '2024-12-23'
+                        clickCount:
+                          type: integer
+                          example: 80
+                  urls:
+                    type: array
+                    description: An array of URLs under the specified topic, each containing short URL performance.
+                    items:
+                      type: object
+                      properties:
+                        shortUrl:
+                          type: string
+                          example: 'https://short.ly/abc123'
+                        totalClicks:
+                          type: integer
+                          example: 100
+                        uniqueClicks:
+                          type: integer
+                          example: 85
+        '404':
+          description: No short URLs found for the specified topic.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 'No short URLs found for this topic'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 'Internal server error'
+
+  /api/analytics/overall:
+    get:
+      summary: Retrieve overall analytics for all short URLs created by the authenticated user
+      description: |
+        Fetches the overall analytics for all short URLs created by the authenticated user, providing a comprehensive view 
+        of their link performance. This includes data such as total clicks, unique user interactions, click counts by date, 
+        operating system and device type breakdowns.
+      responses:
+        '200':
+          description: Successful retrieval of overall analytics data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalUrls:
+                    type: integer
+                    description: Total number of short URLs created by the user.
+                    example: 10
+                  totalClicks:
+                    type: integer
+                    description: Total number of clicks across all URLs created by the user.
+                    example: 500
+                  uniqueClicks:
+                    type: integer
+                    description: Total number of unique users who accessed any of the user's short URLs.
+                    example: 450
+                  clicksByDate:
+                    type: array
+                    description: An array of objects containing date and total click counts for all URLs.
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                          example: '2024-12-23'
+                        clickCount:
+                          type: integer
+                          example: 80
+                  osType:
+                    type: array
+                    description: An array of objects containing operating system details.
+                    items:
+                      type: object
+                      properties:
+                        osName:
+                          type: string
+                          example: 'Windows'
+                        uniqueClicks:
+                          type: integer
+                          example: 120
+                        uniqueUsers:
+                          type: integer
+                          example: 100
+                  deviceType:
+                    type: array
+                    description: An array of objects containing device type details.
+                    items:
+                      type: object
+                      properties:
+                        deviceName:
+                          type: string
+                          example: 'Mobile'
+                        uniqueClicks:
+                          type: integer
+                          example: 250
+                        uniqueUsers:
+                          type: integer
+                          example: 230
+        '404':
+          description: No short URLs found for the user.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 'No short URLs found for the user'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 'Internal server error'
